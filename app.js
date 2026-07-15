@@ -10,6 +10,8 @@ const notificationCard = document.querySelector("#notificationCard");
 const lookupMessage = document.querySelector("#lookupMessage");
 const notificationMessage = document.querySelector("#notificationMessage");
 
+const uspsTrackingLink = document.querySelector("#uspsTrackingLink");
+
 let currentTrackingNumber = "";
 let currentNormalizedStatus = "";
 
@@ -86,11 +88,25 @@ const statusContent = {
 };
 
 function normalizeTrackingNumber(value) {
-  return value.replace(/\s+/g, "").trim();
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .trim();
 }
 
 function formatTrackingNumber(value) {
-  return value.replace(/(.{4})/g, "$1 ").trim();
+  return normalizeTrackingNumber(value)
+    .replace(/(.{4})/g, "$1 ")
+    .trim();
+}
+
+function buildUspsTrackingUrl(trackingNumber) {
+  const cleanTrackingNumber =
+    normalizeTrackingNumber(trackingNumber);
+
+  return (
+    "https://tools.usps.com/go/TrackConfirmAction?tLabels=" +
+    encodeURIComponent(cleanTrackingNumber)
+  );
 }
 
 function showMessage(element, message, type = "") {
@@ -104,9 +120,16 @@ function hideMessage(element) {
   element.classList.add("hidden");
 }
 
-function setButtonLoading(button, isLoading, loadingText, defaultText) {
+function setButtonLoading(
+  button,
+  isLoading,
+  loadingText,
+  defaultText
+) {
   button.disabled = isLoading;
-  button.textContent = isLoading ? loadingText : defaultText;
+  button.textContent = isLoading
+    ? loadingText
+    : defaultText;
 }
 
 function formatDateTime(value) {
@@ -126,212 +149,293 @@ function formatDateTime(value) {
   }).format(date);
 }
 
-function renderStatus(result) {
-  const normalizedStatus = result.normalizedStatus || "UNKNOWN";
-  const display = statusContent[normalizedStatus] || statusContent.UNKNOWN;
-
-  const badge = document.querySelector("#statusBadge");
-
-  document.querySelector("#statusTitle").textContent = display.title;
-  document.querySelector("#statusExplanation").textContent =
-    display.explanation;
-  document.querySelector("#agentScript").textContent = display.script;
-
-  document.querySelector("#resultTrackingNumber").textContent =
-    formatTrackingNumber(result.trackingNumber || currentTrackingNumber);
-
-  document.querySelector("#latestUpdate").textContent =
-    formatDateTime(result.latestUpdate);
-
-  document.querySelector("#latestLocation").textContent =
-    result.latestLocation || "No location available";
-
-  document.querySelector("#rawStatus").textContent =
-    result.rawStatus || "No carrier status available";
-
-  badge.textContent = display.badge;
-  badge.className = `badge ${display.badgeClass}`;
-
-  currentTrackingNumber =
-    result.trackingNumber || currentTrackingNumber;
-
-  currentNormalizedStatus = normalizedStatus;
-
-  statusPanel.classList.remove("hidden");
-  notificationCard.classList.remove("hidden");
-
-  notificationCard.scrollIntoView({
-    behavior: "smooth",
-    block: "nearest"
-  });
-}
-
-lookupForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  hideMessage(lookupMessage);
-  hideMessage(notificationMessage);
-
+function resetResults() {
   statusPanel.classList.add("hidden");
   notificationCard.classList.add("hidden");
 
-  const trackingInput = document.querySelector("#trackingNumber");
-  const trackingNumber = normalizeTrackingNumber(trackingInput.value);
-
-  if (!trackingNumber) {
-    showMessage(
-      lookupMessage,
-      "Enter a USPS tracking number.",
-      "error"
-    );
-    trackingInput.focus();
-    return;
+  if (uspsTrackingLink) {
+    uspsTrackingLink.href = "#";
+    uspsTrackingLink.classList.add("hidden");
   }
 
-  currentTrackingNumber = trackingNumber;
+  currentTrackingNumber = "";
   currentNormalizedStatus = "";
+}
 
-  setButtonLoading(
-    lookupButton,
-    true,
-    "Checking Endicia…",
-    "Check status"
+function renderStatus(result) {
+  const normalizedStatus =
+    result.normalizedStatus || "UNKNOWN";
+
+  const display =
+    statusContent[normalizedStatus] ||
+    statusContent.UNKNOWN;
+
+  const badge =
+    document.querySelector("#statusBadge");
+
+  const trackingNumber =
+    normalizeTrackingNumber(
+      result.trackingNumber ||
+      currentTrackingNumber
+    );
+
+  document.querySelector(
+    "#statusTitle"
+  ).textContent = display.title;
+
+  document.querySelector(
+    "#statusExplanation"
+  ).textContent = display.explanation;
+
+  document.querySelector(
+    "#agentScript"
+  ).textContent = display.script;
+
+  document.querySelector(
+    "#resultTrackingNumber"
+  ).textContent =
+    formatTrackingNumber(trackingNumber);
+
+  document.querySelector(
+    "#latestUpdate"
+  ).textContent =
+    formatDateTime(result.latestUpdate);
+
+  document.querySelector(
+    "#latestLocation"
+  ).textContent =
+    result.latestLocation ||
+    "No location available";
+
+  document.querySelector(
+    "#rawStatus"
+  ).textContent =
+    result.rawStatus ||
+    "No carrier status available";
+
+  badge.textContent = display.badge;
+  badge.className =
+    `badge ${display.badgeClass}`;
+
+  currentTrackingNumber = trackingNumber;
+  currentNormalizedStatus =
+    normalizedStatus;
+
+  if (uspsTrackingLink && trackingNumber) {
+    uspsTrackingLink.href =
+      buildUspsTrackingUrl(trackingNumber);
+
+    uspsTrackingLink.classList.remove(
+      "hidden"
+    );
+  }
+
+  statusPanel.classList.remove("hidden");
+  notificationCard.classList.remove(
+    "hidden"
   );
+}
 
-  try {
-    const response = await fetch("/api/track", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        trackingNumber
-      })
-    });
+lookupForm.addEventListener(
+  "submit",
+  async (event) => {
+    event.preventDefault();
 
-    const data = await response.json();
+    hideMessage(lookupMessage);
+    hideMessage(notificationMessage);
+    resetResults();
 
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-          "Unable to retrieve the tracking status."
+    const trackingInput =
+      document.querySelector(
+        "#trackingNumber"
       );
+
+    const trackingNumber =
+      normalizeTrackingNumber(
+        trackingInput.value
+      );
+
+    if (!trackingNumber) {
+      showMessage(
+        lookupMessage,
+        "Enter a USPS tracking number.",
+        "error"
+      );
+
+      trackingInput.focus();
+      return;
     }
 
-    renderStatus(data);
-  } catch (error) {
-    showMessage(
-      lookupMessage,
-      error.message ||
-        "Unable to retrieve the tracking status.",
-      "error"
-    );
-  } finally {
+    currentTrackingNumber =
+      trackingNumber;
+
     setButtonLoading(
       lookupButton,
-      false,
+      true,
       "Checking Endicia…",
       "Check status"
     );
-  }
-});
 
-notificationForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+    try {
+      const response = await fetch(
+        "/api/track",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+          body: JSON.stringify({
+            trackingNumber
+          })
+        }
+      );
 
-  hideMessage(notificationMessage);
+      const data =
+        await response.json();
 
-  const customerName = document
-    .querySelector("#customerName")
-    .value.trim();
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to retrieve the tracking status."
+        );
+      }
 
-  const customerEmail = document
-    .querySelector("#customerEmail")
-    .value.trim();
-
-  const customerConsent = document
-    .querySelector("#customerConsent")
-    .checked;
-
-  if (!currentTrackingNumber || !currentNormalizedStatus) {
-    showMessage(
-      notificationMessage,
-      "Check the tracking status before enrolling the customer.",
-      "error"
-    );
-    return;
-  }
-
-  if (!customerEmail) {
-    showMessage(
-      notificationMessage,
-      "Enter the customer’s email address.",
-      "error"
-    );
-    document.querySelector("#customerEmail").focus();
-    return;
-  }
-
-  if (!customerConsent) {
-    showMessage(
-      notificationMessage,
-      "Confirm that the customer agreed to receive shipment-status emails.",
-      "error"
-    );
-    return;
-  }
-
-  setButtonLoading(
-    notifyButton,
-    true,
-    "Enrolling customer…",
-    "Enroll customer for updates"
-  );
-
-  try {
-    const response = await fetch("/api/subscribe", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        trackingNumber: currentTrackingNumber,
-        customerName,
-        customerEmail,
-        currentStatus: currentNormalizedStatus,
-        customerConsent
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-          "Unable to enroll the customer."
+      renderStatus(data);
+    } catch (error) {
+      showMessage(
+        lookupMessage,
+        error.message ||
+        "Unable to retrieve the tracking status.",
+        "error"
+      );
+    } finally {
+      setButtonLoading(
+        lookupButton,
+        false,
+        "Checking Endicia…",
+        "Check status"
       );
     }
+  }
+);
 
-    showMessage(
-      notificationMessage,
-      "Customer enrolled successfully. Connect America will email them after a meaningful tracking-status change.",
-      "success"
-    );
+notificationForm.addEventListener(
+  "submit",
+  async (event) => {
+    event.preventDefault();
 
-    notificationForm.reset();
-  } catch (error) {
-    showMessage(
-      notificationMessage,
-      error.message ||
-        "Unable to enroll the customer.",
-      "error"
-    );
-  } finally {
+    hideMessage(notificationMessage);
+
+    const customerName =
+      document
+        .querySelector("#customerName")
+        .value.trim();
+
+    const customerEmail =
+      document
+        .querySelector("#customerEmail")
+        .value.trim();
+
+    const customerConsent =
+      document
+        .querySelector("#customerConsent")
+        .checked;
+
+    if (
+      !currentTrackingNumber ||
+      !currentNormalizedStatus
+    ) {
+      showMessage(
+        notificationMessage,
+        "Check the tracking status before enrolling the customer.",
+        "error"
+      );
+      return;
+    }
+
+    if (!customerEmail) {
+      showMessage(
+        notificationMessage,
+        "Enter the customer’s email address.",
+        "error"
+      );
+
+      document
+        .querySelector("#customerEmail")
+        .focus();
+
+      return;
+    }
+
+    if (!customerConsent) {
+      showMessage(
+        notificationMessage,
+        "Confirm that the customer agreed to receive shipment-status emails.",
+        "error"
+      );
+      return;
+    }
+
     setButtonLoading(
       notifyButton,
-      false,
+      true,
       "Enrolling customer…",
       "Enroll customer for updates"
     );
+
+    try {
+      const response = await fetch(
+        "/api/subscribe",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+          body: JSON.stringify({
+            trackingNumber:
+              currentTrackingNumber,
+            customerName,
+            customerEmail,
+            currentStatus:
+              currentNormalizedStatus,
+            customerConsent
+          })
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to enroll the customer."
+        );
+      }
+
+      showMessage(
+        notificationMessage,
+        "Customer enrolled successfully. Connect America will email them after a meaningful tracking-status change.",
+        "success"
+      );
+
+      notificationForm.reset();
+    } catch (error) {
+      showMessage(
+        notificationMessage,
+        error.message ||
+        "Unable to enroll the customer.",
+        "error"
+      );
+    } finally {
+      setButtonLoading(
+        notifyButton,
+        false,
+        "Enrolling customer…",
+        "Enroll customer for updates"
+      );
+    }
   }
-});
+);
