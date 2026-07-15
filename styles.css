@@ -91,7 +91,12 @@ input {
   margin-bottom: 22px;
   color: #ffffff;
   background:
-    linear-gradient(125deg, rgba(23, 54, 93, 0.98), rgba(0, 90, 156, 0.96) 58%, rgba(0, 163, 224, 0.92));
+    linear-gradient(
+      125deg,
+      rgba(23, 54, 93, 0.98),
+      rgba(0, 90, 156, 0.96) 58%,
+      rgba(0, 163, 224, 0.92)
+    );
 }
 
 .hero-card::after {
@@ -243,7 +248,9 @@ input {
   padding: 0 15px;
   background: #ffffff;
   color: #172033;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .input-wrap input {
@@ -266,7 +273,10 @@ input:focus {
   font-weight: 850;
   cursor: pointer;
   box-shadow: 0 10px 20px rgba(0, 90, 156, 0.18);
-  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    opacity 0.16s ease;
 }
 
 .primary-button:hover {
@@ -355,8 +365,7 @@ input:focus {
   padding: 17px;
   border: 1px solid #dce8f0;
   border-radius: 15px;
-  background:
-    linear-gradient(180deg, #fbfdff 0%, #f4f9fc 100%);
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f9fc 100%);
 }
 
 dt {
@@ -403,6 +412,44 @@ dd {
 .agent-script p:last-child {
   margin: 0;
   line-height: 1.55;
+}
+
+.status-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  border: 1px solid var(--ca-blue);
+  border-radius: 12px;
+  padding: 0 18px;
+  background: #ffffff;
+  color: var(--ca-blue);
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(0, 90, 156, 0.1);
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.secondary-button:hover {
+  background: var(--ca-blue);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(0, 90, 156, 0.2);
+}
+
+.secondary-button:focus-visible {
+  outline: 3px solid rgba(0, 163, 224, 0.22);
+  outline-offset: 3px;
 }
 
 .notification-card {
@@ -524,10 +571,12 @@ dd {
     margin-top: 12px;
   }
 
+  .status-actions,
   .form-actions {
     justify-content: stretch;
   }
 
+  .secondary-button,
   .form-actions .primary-button,
   .input-row .primary-button {
     width: 100%;
