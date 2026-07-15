@@ -7,7 +7,7 @@ const SIGNIN_BASE =
 
 const API_BASE =
   process.env.SERA_API_BASE ||
-  "https://api.stampsendicia.com/sera";
+  "https://api.stampsendicia.com/sera/v1";
 
 const CLIENT_ID = process.env.SERA_CLIENT_ID;
 const CLIENT_SECRET = process.env.SERA_CLIENT_SECRET;
@@ -27,7 +27,7 @@ function validateEnvironment() {
   if (!CLIENT_SECRET) missing.push("SERA_CLIENT_SECRET");
   if (!REFRESH_TOKEN) missing.push("SERA_REFRESH_TOKEN");
 
-  if (missing.length) {
+  if (missing.length > 0) {
     throw new Error(
       `Missing Vercel environment variables: ${missing.join(", ")}`
     );
@@ -53,15 +53,29 @@ async function getAccessToken() {
     })
   });
 
-  const data = await response.json().catch(() => null);
+  const responseText = await response.text();
+
+  let data;
+
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    data = null;
+  }
 
   if (!response.ok || !data?.access_token) {
     console.error("Endicia token refresh failed", {
       httpStatus: response.status,
-      response: data
+      response: data || responseText
     });
 
+    const apiMessage =
+      data?.error_description ||
+      data?.message ||
+      data?.error;
+
     throw new Error(
+      apiMessage ||
       `Endicia authentication failed. HTTP ${response.status}`
     );
   }
@@ -69,7 +83,11 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-function normalizeStatus(statusCode, carrierDescription, latestEvent) {
+function normalizeStatus(
+  statusCode,
+  carrierDescription,
+  latestEventDescription
+) {
   const code = String(statusCode || "")
     .trim()
     .toLowerCase();
@@ -77,7 +95,7 @@ function normalizeStatus(statusCode, carrierDescription, latestEvent) {
   const combinedText = [
     code,
     carrierDescription,
-    latestEvent
+    latestEventDescription
   ]
     .filter(Boolean)
     .join(" ")
@@ -121,11 +139,7 @@ function normalizeStatus(statusCode, carrierDescription, latestEvent) {
   }
 
   if (
-    [
-      "in_transit",
-      "transit",
-      "moving"
-    ].includes(code) ||
+    ["in_transit", "transit", "moving"].includes(code) ||
     /in transit|moving through network|arrived at|departed|processed through|moving within the usps network/.test(
       combinedText
     )
@@ -134,11 +148,7 @@ function normalizeStatus(statusCode, carrierDescription, latestEvent) {
   }
 
   if (
-    [
-      "pre_shipment",
-      "label_created",
-      "printed"
-    ].includes(code) ||
+    ["pre_shipment", "label_created", "printed"].includes(code) ||
     /pre[- ]?shipment|label created|shipping label created|printed|awaiting item|usps awaiting item/.test(
       combinedText
     )
@@ -154,6 +164,10 @@ function buildLocation(event) {
     return "";
   }
 
+  if (event.event_location) {
+    return event.event_location;
+  }
+
   return [
     event.city,
     event.state_province,
@@ -164,12 +178,34 @@ function buildLocation(event) {
     .join(", ");
 }
 
+function getEventDate(event) {
+  return (
+    event?.occurred_at ||
+    event?.event_datetime ||
+    event?.event_date_time ||
+    event?.event_date ||
+    ""
+  );
+}
+
+function getLatestEvent(events) {
+  if (!Array.isArray(events) || events.length === 0) {
+    return null;
+  }
+
+  return [...events].sort((a, b) => {
+    const aTime = new Date(getEventDate(a) || 0).getTime();
+    const bTime = new Date(getEventDate(b) || 0).getTime();
+
+    return bTime - aTime;
+  })[0];
+}
+
 async function getTracking(accessToken, trackingNumber) {
   const trackingUrl = new URL(
-    `${API_BASE.replace(/\/+$/, "")}/v1/tracking`
+    `${API_BASE.replace(/\/+$/, "")}/tracking`
   );
 
-  trackingUrl.searchParams.set("carrier", "usps");
   trackingUrl.searchParams.set(
     "tracking_number",
     trackingNumber
@@ -183,12 +219,21 @@ async function getTracking(accessToken, trackingNumber) {
     }
   });
 
-  const data = await response.json().catch(() => null);
+  const responseText = await response.text();
+
+  let data;
+
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    data = null;
+  }
 
   if (!response.ok) {
     console.error("Endicia tracking lookup failed", {
+      requestUrl: trackingUrl.toString(),
       httpStatus: response.status,
-      response: data,
+      response: data || responseText,
       trackingNumber
     });
 
@@ -200,7 +245,8 @@ async function getTracking(accessToken, trackingNumber) {
 
     throw new Error(
       apiMessage ||
-        `Endicia tracking lookup failed. HTTP ${response.status}`
+      responseText ||
+      `Endicia tracking lookup failed. HTTP ${response.status}`
     );
   }
 
@@ -252,47 +298,62 @@ module.exports = async function handler(req, res) {
       ? trackingData.tracking_events
       : [];
 
-    const latestEvent = events[0] || null;
+    const latestEvent = getLatestEvent(events);
 
     const rawStatus =
       trackingData?.carrier_status_description ||
+      trackingData?.status_description ||
       trackingData?.status_code ||
+      latestEvent?.event_description ||
       "Status unavailable";
 
     const normalizedStatus = normalizeStatus(
       trackingData?.status_code,
-      trackingData?.carrier_status_description,
+      rawStatus,
       latestEvent?.event_description
     );
 
     return sendJson(res, 200, {
       ok: true,
+
       trackingNumber:
         trackingData?.tracking_number ||
         trackingNumber,
+
       carrierName:
         trackingData?.carrier_name ||
         "USPS",
+
       normalizedStatus,
+
       statusCode:
         trackingData?.status_code ||
         "",
+
       rawStatus,
+
       estimatedDeliveryDate:
         trackingData?.estimated_delivery_date ||
         "",
+
       latestEvent:
         latestEvent?.event_description ||
         rawStatus,
+
       latestUpdate:
-        latestEvent?.occurred_at ||
-        "",
+        getEventDate(latestEvent),
+
       latestLocation:
         buildLocation(latestEvent),
-      trackingEvents: events
+
+      trackingEvents:
+        events
     });
   } catch (error) {
-    console.error("Connect America tracking error", error);
+    console.error(
+      "Connect America tracking error",
+      error
+    );
 
     return sendJson(res, 500, {
       ok: false,
