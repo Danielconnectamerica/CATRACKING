@@ -7,35 +7,43 @@ const SIGNIN_BASE =
 
 const API_BASE =
   process.env.SERA_API_BASE ||
-  "https://api.stampsendicia.com/sera/v1";
+  "https://api.stampsendicia.com/sera";
 
 const CLIENT_ID = process.env.SERA_CLIENT_ID;
 const CLIENT_SECRET = process.env.SERA_CLIENT_SECRET;
 const REFRESH_TOKEN = process.env.SERA_REFRESH_TOKEN;
 
-function sendJson(res, status, payload) {
-  res.statusCode = status;
+function sendJson(res, statusCode, payload) {
+  res.statusCode = statusCode;
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(payload));
 }
 
-function validateEnvironment() {
-  const missing = [];
+function validateEnvironmentVariables() {
+  const missingVariables = [];
 
-  if (!CLIENT_ID) missing.push("SERA_CLIENT_ID");
-  if (!CLIENT_SECRET) missing.push("SERA_CLIENT_SECRET");
-  if (!REFRESH_TOKEN) missing.push("SERA_REFRESH_TOKEN");
+  if (!CLIENT_ID) {
+    missingVariables.push("SERA_CLIENT_ID");
+  }
 
-  if (missing.length > 0) {
+  if (!CLIENT_SECRET) {
+    missingVariables.push("SERA_CLIENT_SECRET");
+  }
+
+  if (!REFRESH_TOKEN) {
+    missingVariables.push("SERA_REFRESH_TOKEN");
+  }
+
+  if (missingVariables.length > 0) {
     throw new Error(
-      `Missing Vercel environment variables: ${missing.join(", ")}`
+      `Missing Vercel environment variables: ${missingVariables.join(", ")}`
     );
   }
 }
 
 async function getAccessToken() {
-  validateEnvironment();
+  validateEnvironmentVariables();
 
   const tokenUrl =
     `${SIGNIN_BASE.replace(/\/+$/, "")}/oauth/token`;
@@ -55,7 +63,7 @@ async function getAccessToken() {
 
   const responseText = await response.text();
 
-  let data;
+  let data = null;
 
   try {
     data = JSON.parse(responseText);
@@ -69,13 +77,13 @@ async function getAccessToken() {
       response: data || responseText
     });
 
-    const apiMessage =
+    const errorMessage =
       data?.error_description ||
       data?.message ||
       data?.error;
 
     throw new Error(
-      apiMessage ||
+      errorMessage ||
       `Endicia authentication failed. HTTP ${response.status}`
     );
   }
@@ -159,6 +167,34 @@ function normalizeStatus(
   return "UNKNOWN";
 }
 
+function getEventDate(event) {
+  return (
+    event?.occurred_at ||
+    event?.event_datetime ||
+    event?.event_date_time ||
+    event?.event_date ||
+    ""
+  );
+}
+
+function getLatestEvent(events) {
+  if (!Array.isArray(events) || events.length === 0) {
+    return null;
+  }
+
+  return [...events].sort((firstEvent, secondEvent) => {
+    const firstTime = new Date(
+      getEventDate(firstEvent) || 0
+    ).getTime();
+
+    const secondTime = new Date(
+      getEventDate(secondEvent) || 0
+    ).getTime();
+
+    return secondTime - firstTime;
+  })[0];
+}
+
 function buildLocation(event) {
   if (!event) {
     return "";
@@ -178,32 +214,9 @@ function buildLocation(event) {
     .join(", ");
 }
 
-function getEventDate(event) {
-  return (
-    event?.occurred_at ||
-    event?.event_datetime ||
-    event?.event_date_time ||
-    event?.event_date ||
-    ""
-  );
-}
-
-function getLatestEvent(events) {
-  if (!Array.isArray(events) || events.length === 0) {
-    return null;
-  }
-
-  return [...events].sort((a, b) => {
-    const aTime = new Date(getEventDate(a) || 0).getTime();
-    const bTime = new Date(getEventDate(b) || 0).getTime();
-
-    return bTime - aTime;
-  })[0];
-}
-
 async function getTracking(accessToken, trackingNumber) {
   const trackingUrl = new URL(
-    `${API_BASE.replace(/\/+$/, "")}/tracking`
+    `${API_BASE.replace(/\/+$/, "")}/v1/tracking`
   );
 
   trackingUrl.searchParams.set(
@@ -221,7 +234,7 @@ async function getTracking(accessToken, trackingNumber) {
 
   const responseText = await response.text();
 
-  let data;
+  let data = null;
 
   try {
     data = JSON.parse(responseText);
@@ -237,15 +250,14 @@ async function getTracking(accessToken, trackingNumber) {
       trackingNumber
     });
 
-    const apiMessage =
+    const errorMessage =
       data?.message ||
       data?.error?.message ||
       data?.error_description ||
       data?.error;
 
     throw new Error(
-      apiMessage ||
-      responseText ||
+      errorMessage ||
       `Endicia tracking lookup failed. HTTP ${response.status}`
     );
   }
