@@ -164,7 +164,11 @@ function normalizeStatus(
   }
 
   if (
-    ["in_transit", "transit", "moving"].includes(code) ||
+    [
+      "in_transit",
+      "transit",
+      "moving"
+    ].includes(code) ||
     /in transit|moving through network|arrived at|departed|processed through|moving within the usps network/.test(
       combinedText
     )
@@ -273,13 +277,16 @@ function getTrackingEvents(trackingData) {
   return [];
 }
 
-async function getTracking(accessToken, trackingNumber) {
+async function getTracking(
+  accessToken,
+  trackingNumber
+) {
   const trackingUrl = new URL(
     `${API_BASE.replace(/\/+$/, "")}/v1/tracking`
   );
 
   trackingUrl.searchParams.set(
-    "carrier_code",
+    "carrier",
     "usps"
   );
 
@@ -288,24 +295,30 @@ async function getTracking(accessToken, trackingNumber) {
     trackingNumber
   );
 
-  const response = await fetch(trackingUrl, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json"
+  const response = await fetch(
+    trackingUrl.toString(),
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json"
+      }
     }
-  });
+  );
 
   const { data, responseText } =
     await parseResponse(response);
 
   if (!response.ok) {
-    console.error("Endicia tracking lookup failed", {
-      requestUrl: trackingUrl.toString(),
-      httpStatus: response.status,
-      response: data || responseText,
-      trackingNumber
-    });
+    console.error(
+      "Endicia tracking lookup failed",
+      {
+        requestUrl: trackingUrl.toString(),
+        httpStatus: response.status,
+        response: data || responseText,
+        trackingNumber
+      }
+    );
 
     const errorMessage =
       data?.message ||
@@ -329,7 +342,10 @@ async function getTracking(accessToken, trackingNumber) {
   return data;
 }
 
-module.exports = async function handler(req, res) {
+module.exports = async function handler(
+  req,
+  res
+) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
 
@@ -348,7 +364,8 @@ module.exports = async function handler(req, res) {
   if (!trackingNumber) {
     return sendJson(res, 400, {
       ok: false,
-      error: "A USPS tracking number is required."
+      error:
+        "A USPS tracking number is required."
     });
   }
 
@@ -401,7 +418,7 @@ module.exports = async function handler(req, res) {
 
       carrierName:
         trackingData?.carrier_name ||
-        trackingData?.carrier_code ||
+        trackingData?.carrier ||
         "USPS",
 
       normalizedStatus,
