@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta
+    name="description"
+    content="Connect America internal USPS shipment tracking and customer notification tool."
+  />
+  <title>Connect America Shipment Tracking</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <main class="page-shell">
+    <header class="brand-header">
+      <div class="brand-mark" aria-hidden="true">CA</div>
+
+      <div>
+        <p class="brand-name">Connect America</p>
+        <p class="brand-department">Customer Service Operations</p>
+      </div>
+    </header>
+
+    <section class="hero-card">
+      <div class="hero-content">
+        <span class="internal-badge">Internal Use Only</span>
+
+        <p class="eyebrow">USPS Shipment Tracking</p>
+
+        <h1>Connect America Tracking Lookup</h1>
+
+        <p class="hero-description">
+          Verify the latest USPS status before advising the customer, and enroll
+          the customer to receive an email when the shipment status changes.
+        </p>
+      </div>
+
+      <div class="hero-icon" aria-hidden="true">
+        <svg viewBox="0 0 64 64" role="img">
+          <path
+            d="M10 18h30v25H10zM40 27h8l7 8v8H40zM18 49a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm28 0a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </div>
+    </section>
+
+    <section class="card lookup-card">
+      <div class="section-heading">
+        <div>
+          <p class="section-number">Step 1</p>
+          <h2>Check the shipment status</h2>
+        </div>
+
+        <p class="section-description">
+          Enter the USPS tracking number listed on the customer’s order.
+        </p>
+      </div>
+
+      <form id="lookupForm" novalidate>
+        <label for="trackingNumber">USPS tracking number</label>
+
+        <div class="input-row">
+          <div class="input-wrap">
+            <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+
+            <input
+              id="trackingNumber"
+              name="trackingNumber"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              placeholder="Example: 9400 1000 0000 0000 0000 00"
+              aria-describedby="trackingHelp"
+              required
+            />
+          </div>
+
+          <button id="lookupButton" class="primary-button" type="submit">
+            <span>Check status</span>
+          </button>
+        </div>
+
+        <p id="trackingHelp" class="help-text">
+          Spaces are optional. The tracking number is checked directly through
+          the Connect America Endicia account.
+        </p>
+      </form>
+
+      <div id="lookupMessage" class="message hidden" role="status"></div>
+
+      <section id="statusPanel" class="status-panel hidden" aria-live="polite">
+        <div class="status-header">
+          <div>
+            <p class="field-label">Current shipment status</p>
+            <h2 id="statusTitle">—</h2>
+          </div>
+
+          <span id="statusBadge" class="badge">—</span>
+        </div>
+
+        <p id="statusExplanation" class="status-explanation"></p>
+
+        <dl class="details-grid">
+          <div class="detail-card">
+            <dt>Tracking number</dt>
+            <dd id="resultTrackingNumber">—</dd>
+          </div>
+
+          <div class="detail-card">
+            <dt>Latest update</dt>
+            <dd id="latestUpdate">—</dd>
+          </div>
+
+          <div class="detail-card">
+            <dt>Latest location</dt>
+            <dd id="latestLocation">—</dd>
+          </div>
+
+          <div class="detail-card">
+            <dt>USPS carrier status</dt>
+            <dd id="rawStatus">—</dd>
+          </div>
+        </dl>
+
+        <div class="agent-script">
+          <div class="agent-script-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M12 3a9 9 0 0 0-9 9v3a3 3 0 0 0 3 3h1v-7H5a7 7 0 0 1 14 0h-2v7h1a3 3 0 0 0 3-3v-3a9 9 0 0 0-9-9Zm5 15c-.9 1.8-2.5 3-5 3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+
+          <div>
+            <p class="field-label">Suggested wording for the customer</p>
+            <p id="agentScript"></p>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="notificationCard" class="card notification-card hidden">
+      <div class="section-heading">
+        <div>
+          <p class="section-number">Step 2</p>
+          <h2>Email the customer when there is an update</h2>
+        </div>
+
+        <p class="section-description">
+          Use this only after the customer agrees to receive shipment-status
+          emails.
+        </p>
+      </div>
+
+      <form id="notificationForm" novalidate>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="customerName">
+              Customer name
+              <span class="optional">(optional)</span>
+            </label>
+
+            <input
+              id="customerName"
+              name="customerName"
+              type="text"
+              autocomplete="name"
+              placeholder="Customer name"
+            />
+          </div>
+
+          <div class="form-field">
+            <label for="customerEmail">Customer email</label>
+
+            <input
+              id="customerEmail"
+              name="customerEmail"
+              type="email"
+              autocomplete="email"
+              placeholder="customer@example.com"
+              required
+            />
+          </div>
+        </div>
+
+        <label class="consent-box">
+          <input id="customerConsent" type="checkbox" required />
+
+          <span class="consent-copy">
+            <strong>Customer consent confirmed</strong>
+            <small>
+              The customer agreed to receive automated Connect America shipment
+              status emails for this tracking number.
+            </small>
+          </span>
+        </label>
+
+        <div class="form-actions">
+          <button id="notifyButton" class="primary-button" type="submit">
+            Enroll customer for updates
+          </button>
+        </div>
+      </form>
+
+      <div
+        id="notificationMessage"
+        class="message hidden"
+        role="status"
+      ></div>
+    </section>
+
+    <footer class="page-footer">
+      <p>
+        Connect America internal operations tool. Shipment information is
+        retrieved from Endicia and USPS.
+      </p>
+    </footer>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
