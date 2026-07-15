@@ -1,0 +1,12 @@
+{
+  "name": "usps-status-notification-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal USPS tracking lookup and customer status notification site using Endicia, Vercel, SharePoint, and Power Automate.",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
