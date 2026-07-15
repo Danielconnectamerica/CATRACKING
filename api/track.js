@@ -42,6 +42,29 @@ function validateEnvironmentVariables() {
   }
 }
 
+async function parseResponse(response) {
+  const responseText = await response.text();
+
+  if (!responseText) {
+    return {
+      data: null,
+      responseText: ""
+    };
+  }
+
+  try {
+    return {
+      data: JSON.parse(responseText),
+      responseText
+    };
+  } catch {
+    return {
+      data: null,
+      responseText
+    };
+  }
+}
+
 async function getAccessToken() {
   validateEnvironmentVariables();
 
@@ -51,7 +74,8 @@ async function getAccessToken() {
   const response = await fetch(tokenUrl, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      Accept: "application/json"
     },
     body: JSON.stringify({
       grant_type: "refresh_token",
@@ -61,15 +85,8 @@ async function getAccessToken() {
     })
   });
 
-  const responseText = await response.text();
-
-  let data = null;
-
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    data = null;
-  }
+  const { data, responseText } =
+    await parseResponse(response);
 
   if (!response.ok || !data?.access_token) {
     console.error("Endicia token refresh failed", {
@@ -156,7 +173,11 @@ function normalizeStatus(
   }
 
   if (
-    ["pre_shipment", "label_created", "printed"].includes(code) ||
+    [
+      "pre_shipment",
+      "label_created",
+      "printed"
+    ].includes(code) ||
     /pre[- ]?shipment|label created|shipping label created|printed|awaiting item|usps awaiting item/.test(
       combinedText
     )
@@ -167,12 +188,23 @@ function normalizeStatus(
   return "UNKNOWN";
 }
 
+function getEventDescription(event) {
+  return (
+    event?.event_description ||
+    event?.description ||
+    event?.status_description ||
+    event?.status ||
+    ""
+  );
+}
+
 function getEventDate(event) {
   return (
     event?.occurred_at ||
     event?.event_datetime ||
     event?.event_date_time ||
     event?.event_date ||
+    event?.timestamp ||
     ""
   );
 }
@@ -183,15 +215,15 @@ function getLatestEvent(events) {
   }
 
   return [...events].sort((firstEvent, secondEvent) => {
-    const firstTime = new Date(
+    const firstDate = new Date(
       getEventDate(firstEvent) || 0
     ).getTime();
 
-    const secondTime = new Date(
+    const secondDate = new Date(
       getEventDate(secondEvent) || 0
     ).getTime();
 
-    return secondTime - firstTime;
+    return secondDate - firstDate;
   })[0];
 }
 
@@ -204,6 +236,21 @@ function buildLocation(event) {
     return event.event_location;
   }
 
+  if (event.location) {
+    if (typeof event.location === "string") {
+      return event.location;
+    }
+
+    return [
+      event.location.city,
+      event.location.state_province,
+      event.location.postal_code,
+      event.location.country_code
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+
   return [
     event.city,
     event.state_province,
@@ -214,9 +261,26 @@ function buildLocation(event) {
     .join(", ");
 }
 
+function getTrackingEvents(trackingData) {
+  if (Array.isArray(trackingData?.tracking_events)) {
+    return trackingData.tracking_events;
+  }
+
+  if (Array.isArray(trackingData?.events)) {
+    return trackingData.events;
+  }
+
+  return [];
+}
+
 async function getTracking(accessToken, trackingNumber) {
   const trackingUrl = new URL(
     `${API_BASE.replace(/\/+$/, "")}/v1/tracking`
+  );
+
+  trackingUrl.searchParams.set(
+    "carrier_code",
+    "usps"
   );
 
   trackingUrl.searchParams.set(
@@ -232,15 +296,8 @@ async function getTracking(accessToken, trackingNumber) {
     }
   });
 
-  const responseText = await response.text();
-
-  let data = null;
-
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    data = null;
-  }
+  const { data, responseText } =
+    await parseResponse(response);
 
   if (!response.ok) {
     console.error("Endicia tracking lookup failed", {
@@ -254,11 +311,18 @@ async function getTracking(accessToken, trackingNumber) {
       data?.message ||
       data?.error?.message ||
       data?.error_description ||
-      data?.error;
+      data?.error ||
+      data?.errors?.[0]?.message;
 
     throw new Error(
       errorMessage ||
       `Endicia tracking lookup failed. HTTP ${response.status}`
+    );
+  }
+
+  if (!data) {
+    throw new Error(
+      "Endicia returned an empty or unreadable tracking response."
     );
   }
 
@@ -297,33 +361,36 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const accessToken = await getAccessToken();
+    const accessToken =
+      await getAccessToken();
 
-    const trackingData = await getTracking(
-      accessToken,
-      trackingNumber
-    );
+    const trackingData =
+      await getTracking(
+        accessToken,
+        trackingNumber
+      );
 
-    const events = Array.isArray(
-      trackingData?.tracking_events
-    )
-      ? trackingData.tracking_events
-      : [];
+    const events =
+      getTrackingEvents(trackingData);
 
-    const latestEvent = getLatestEvent(events);
+    const latestEvent =
+      getLatestEvent(events);
 
     const rawStatus =
       trackingData?.carrier_status_description ||
       trackingData?.status_description ||
       trackingData?.status_code ||
-      latestEvent?.event_description ||
+      trackingData?.status ||
+      getEventDescription(latestEvent) ||
       "Status unavailable";
 
-    const normalizedStatus = normalizeStatus(
-      trackingData?.status_code,
-      rawStatus,
-      latestEvent?.event_description
-    );
+    const normalizedStatus =
+      normalizeStatus(
+        trackingData?.status_code ||
+          trackingData?.status,
+        rawStatus,
+        getEventDescription(latestEvent)
+      );
 
     return sendJson(res, 200, {
       ok: true,
@@ -334,22 +401,25 @@ module.exports = async function handler(req, res) {
 
       carrierName:
         trackingData?.carrier_name ||
+        trackingData?.carrier_code ||
         "USPS",
 
       normalizedStatus,
 
       statusCode:
         trackingData?.status_code ||
+        trackingData?.status ||
         "",
 
       rawStatus,
 
       estimatedDeliveryDate:
         trackingData?.estimated_delivery_date ||
+        trackingData?.estimated_delivery ||
         "",
 
       latestEvent:
-        latestEvent?.event_description ||
+        getEventDescription(latestEvent) ||
         rawStatus,
 
       latestUpdate:
