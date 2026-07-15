@@ -2,7 +2,7 @@
 // Sends a customer tracking-notification enrollment to Power Automate.
 
 const POWER_AUTOMATE_WEBHOOK_URL =
-  process.env.NOTIFICATION_WEBHOOK_URL;
+  process.env.SHEETS_WEBHOOK_URL;
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
     return sendJson(res, 500, {
       ok: false,
       error:
-        "NOTIFICATION_WEBHOOK_URL is not configured in Vercel."
+        "SHEETS_WEBHOOK_URL is not configured in Vercel."
     });
   }
 
